@@ -494,7 +494,7 @@ fn compute_blend_factor(bloom: &Bloom, mip: f32, max_mip: f32) -> f32 {
             .clamp(0.0, 1.0);
     lf_boost *= match bloom.composite_mode {
         BloomCompositeMode::EnergyConserving => 1.0 - bloom.intensity,
-        BloomCompositeMode::Additive => 1.0,
+        BloomCompositeMode::Additive | BloomCompositeMode::Screen => 1.0,
     };
 
     (bloom.intensity + lf_boost) * high_pass_lq
