@@ -17,21 +17,21 @@ complex_script_segmentation = ["parley/complex-scripts"]
 legacy_glyph_weight = []
 
 [dependencies]
-# bevy
-bevy_app = { path = "../bevy_app", version = "0.20.0" }
-bevy_asset = { path = "../bevy_asset", version = "0.20.0" }
-bevy_clipboard = { path = "../bevy_clipboard", version = "0.20.0", default-features = false }
-bevy_color = { path = "../bevy_color", version = "0.20.0" }
-bevy_derive = { path = "../bevy_derive", version = "0.20.0" }
-bevy_ecs = { path = "../bevy_ecs", version = "0.20.0" }
-bevy_image = { path = "../bevy_image", version = "0.20.0" }
-bevy_log = { path = "../bevy_log", version = "0.20.0" }
-bevy_math = { path = "../bevy_math", version = "0.20.0" }
-bevy_reflect = { path = "../bevy_reflect", version = "0.20.0", features = [
+# bevy, from crates.io rather than by path so a `[patch]` by git replaces only bevy_text
+bevy_app = { version = "0.20.0" }
+bevy_asset = { version = "0.20.0" }
+bevy_clipboard = { version = "0.20.0", default-features = false }
+bevy_color = { version = "0.20.0" }
+bevy_derive = { version = "0.20.0" }
+bevy_ecs = { version = "0.20.0" }
+bevy_image = { version = "0.20.0" }
+bevy_log = { version = "0.20.0" }
+bevy_math = { version = "0.20.0" }
+bevy_reflect = { version = "0.20.0", features = [
   "smol_str",
 ] }
-bevy_utils = { path = "../bevy_utils", version = "0.20.0" }
-bevy_platform = { path = "../bevy_platform", version = "0.20.0", default-features = false, features = [
+bevy_utils = { version = "0.20.0" }
+bevy_platform = { version = "0.20.0", default-features = false, features = [
   "std",
   "serialize",
 ] }
