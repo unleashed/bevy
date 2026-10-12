@@ -38,6 +38,7 @@ pub struct BloomUpsamplingPipeline {
 pub struct BloomUpsamplingPipelineKeys {
     composite_mode: BloomCompositeMode,
     target_format: TextureFormat,
+    final_pass: bool,
 }
 
 pub fn init_bloom_upscaling_pipeline(
@@ -71,7 +72,14 @@ impl SpecializedRenderPipeline for BloomUpsamplingPipeline {
     type Key = BloomUpsamplingPipelineKeys;
 
     fn specialize(&self, key: Self::Key) -> RenderPipelineDescriptor {
+        let screen_final = key.final_pass && key.composite_mode == BloomCompositeMode::Screen;
         let color_blend = match key.composite_mode {
+            // Godot's post.glsl: `color + glow - color * glow`, glow already scaled and clamped.
+            BloomCompositeMode::Screen if key.final_pass => BlendComponent {
+                src_factor: BlendFactor::OneMinusDst,
+                dst_factor: BlendFactor::One,
+                operation: BlendOperation::Add,
+            },
             BloomCompositeMode::EnergyConserving => {
                 // At the time of developing this we decided to blend our
                 // blur pyramid levels using native WGPU render pass blend
@@ -96,7 +104,7 @@ impl SpecializedRenderPipeline for BloomUpsamplingPipeline {
                     operation: BlendOperation::Add,
                 }
             }
-            BloomCompositeMode::Additive => BlendComponent {
+            BloomCompositeMode::Additive | BloomCompositeMode::Screen => BlendComponent {
                 src_factor: BlendFactor::Constant,
                 dst_factor: BlendFactor::One,
                 operation: BlendOperation::Add,
@@ -109,6 +117,11 @@ impl SpecializedRenderPipeline for BloomUpsamplingPipeline {
             vertex: self.fullscreen_shader.to_vertex_state(),
             fragment: Some(FragmentState {
                 shader: self.fragment_shader.clone(),
+                shader_defs: if screen_final {
+                    vec!["SCREEN_FINAL".into()]
+                } else {
+                    vec![]
+                },
                 entry_point: Some("upsample".into()),
                 targets: vec![Some(ColorTargetState {
                     format: key.target_format,
@@ -143,6 +156,7 @@ pub fn prepare_upsampling_pipeline(
             BloomUpsamplingPipelineKeys {
                 composite_mode: bloom.composite_mode,
                 target_format: BLOOM_TEXTURE_FORMAT,
+                final_pass: false,
             },
         );
 
@@ -152,6 +166,7 @@ pub fn prepare_upsampling_pipeline(
             BloomUpsamplingPipelineKeys {
                 composite_mode: bloom.composite_mode,
                 target_format: view.target_format,
+                final_pass: true,
             },
         );
 

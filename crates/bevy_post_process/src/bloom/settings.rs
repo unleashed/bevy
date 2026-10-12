@@ -218,6 +218,10 @@ pub struct BloomPrefilter {
 pub enum BloomCompositeMode {
     EnergyConserving,
     Additive,
+    /// Screen blend `dst + src - src * dst` of the final upsampled mip into the view, with
+    /// `intensity` applied in the shader and the bloom clamped to 1.0: Godot's compatibility
+    /// glow composite. Intermediate mips accumulate as in [`BloomCompositeMode::Additive`].
+    Screen,
 }
 
 impl SyncComponent<RenderApp> for Bloom {
@@ -257,6 +261,7 @@ impl ExtractComponent<RenderApp> for Bloom {
                         .expect("Valid screen size values for Bloom settings")
                         .ratio(),
                     scale: bloom.scale,
+                    intensity: bloom.intensity,
                 };
 
                 Some((bloom.clone(), uniform))

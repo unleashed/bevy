@@ -11,6 +11,7 @@ struct BloomUniforms {
     viewport: vec4<f32>,
     scale: vec2<f32>,
     aspect: f32,
+    intensity: f32,
 };
 
 @group(0) @binding(0) var input_texture: texture_2d<f32>;
@@ -189,5 +190,9 @@ fn downsample(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
 
 @fragment
 fn upsample(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
+@if(SCREEN_FINAL) {
+    return vec4<f32>(min(sample_input_3x3_tent(uv) * uniforms.intensity, vec3<f32>(1.0)), 1.0);
+} @else {
     return vec4<f32>(sample_input_3x3_tent(uv), 1.0);
+}
 }
