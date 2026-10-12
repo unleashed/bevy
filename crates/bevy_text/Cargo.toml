@@ -13,6 +13,8 @@ default_font = []
 system_font_discovery = ["parley/system"]
 system_clipboard = ["bevy_clipboard/system_clipboard"]
 complex_script_segmentation = ["parley/complex-scripts"]
+# Scale glyph outlines by 64/60 before rasterising, as Godot 4.7.2 does.
+legacy_glyph_weight = []
 
 [dependencies]
 # bevy

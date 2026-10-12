@@ -197,14 +197,21 @@ pub fn get_outlined_glyph_texture(
     glyph_id: u16,
     font_smoothing: FontSmoothing,
 ) -> Result<(Image, Vec2, bool), TextError> {
-    let image = swash::scale::Render::new(&[
+    let mut render = swash::scale::Render::new(&[
         swash::scale::Source::ColorOutline(0),
         swash::scale::Source::ColorBitmap(swash::scale::StrikeWith::BestFit),
         swash::scale::Source::Outline,
-    ])
-    .format(swash::zeno::Format::Alpha)
-    .render(scaler, glyph_id)
-    .ok_or(TextError::FailedToGetGlyphImage(glyph_id))?;
+    ]);
+    render.format(swash::zeno::Format::Alpha);
+    // Godot 4.7.2's `ft_point2` divides 26.6 outline coordinates by 60.0f (fixed in 4.8 behind `gui/fonts/compatibility/msdf_legacy_scaling`).
+    #[cfg(feature = "legacy_glyph_weight")]
+    render.transform(Some(swash::zeno::Transform::scale(
+        64.0 / 60.0,
+        64.0 / 60.0,
+    )));
+    let image = render
+        .render(scaler, glyph_id)
+        .ok_or(TextError::FailedToGetGlyphImage(glyph_id))?;
 
     let left = image.placement.left;
     let top = image.placement.top;
