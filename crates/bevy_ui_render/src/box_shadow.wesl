@@ -1,5 +1,7 @@
 import bevy_render::view::View;
 import bevy_render::globals::Globals;
+@if(SRGB_OUTPUT)
+import bevy_render::color_operations::linear_to_srgb;
 import package::ui::{
     select_corner_radius
 };
@@ -96,5 +98,10 @@ fn fragment(
     in: BoxShadowVertexOutput,
 ) -> @location(0) vec4<f32> {
     let g = in.color.a * roundedBoxShadow(-0.5 * in.size, 0.5 * in.size, in.point, max(in.blur, 0.01), in.radius_x, in.radius_y);
-    return vec4(in.color.rgb, g);
+    var out = vec4(in.color.rgb, g);
+
+@if(SRGB_OUTPUT)
+    out = vec4(linear_to_srgb(out.rgb), out.a);
+
+    return out;
 }

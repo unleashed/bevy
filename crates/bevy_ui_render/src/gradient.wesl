@@ -20,6 +20,8 @@ import bevy_render::color_operations::{
     okhsl_to_linear_rgb,
     srgb_to_linear,
 };
+@if(SRGB_OUTPUT)
+import bevy_render::color_operations::linear_to_srgb;
 
 import bevy_render::maths::PI;
 
@@ -127,11 +129,17 @@ fn fragment(in: GradientVertexOutput) -> @location(0) vec4<f32> {
         in.flags
     );
 
+    var out: vec4<f32>;
     if enabled(in.flags, BORDER_ANY) {
-        return draw_uinode_border(gradient_color, in.point, in.size, in.radius_x, in.radius_y, in.border, in.flags);
+        out = draw_uinode_border(gradient_color, in.point, in.size, in.radius_x, in.radius_y, in.border, in.flags);
     } else {
-        return draw_uinode_background(gradient_color, in.point, in.size, in.radius_x, in.radius_y, in.border, in.flags);
+        out = draw_uinode_background(gradient_color, in.point, in.size, in.radius_x, in.radius_y, in.border, in.flags);
     }
+
+@if(SRGB_OUTPUT)
+    out = vec4(linear_to_srgb(out.rgb), out.a);
+
+    return out;
 }
 
 fn rem_euclid(a: f32, b: f32) -> f32 {

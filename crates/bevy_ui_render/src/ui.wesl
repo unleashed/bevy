@@ -1,4 +1,6 @@
 import bevy_render::view::View;
+@if(SRGB_OUTPUT)
+import bevy_render::color_operations::linear_to_srgb;
 
 const TEXTURED = 1u;
 const RIGHT_VERTEX = 2u;
@@ -259,11 +261,17 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     // This allows us to draw both textured and untextured shapes together in the same batch.
     let color = select(in.color, in.color * texture_color, enabled(in.flags, TEXTURED));
 
+    var out: vec4<f32>;
     if enabled(in.flags, BORDER_ANY) {
-        return draw_uinode_border(color, in.point, in.size, in.radius_x, in.radius_y, in.border, in.flags);
+        out = draw_uinode_border(color, in.point, in.size, in.radius_x, in.radius_y, in.border, in.flags);
     } else {
-        return draw_uinode_background(color, in.point, in.size, in.radius_x, in.radius_y, in.border, in.flags);
+        out = draw_uinode_background(color, in.point, in.size, in.radius_x, in.radius_y, in.border, in.flags);
     }
+
+@if(SRGB_OUTPUT)
+    out = vec4(linear_to_srgb(out.rgb), out.a);
+
+    return out;
 }
 
 /// One iteration of Newton's method on the 2D equation of an ellipse:

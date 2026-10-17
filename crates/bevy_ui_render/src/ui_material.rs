@@ -127,6 +127,8 @@ pub trait UiMaterial: AsBindGroup + Asset + Clone + Sized {
 
 pub struct UiMaterialKey<M: UiMaterial> {
     pub target_format: TextureFormat,
+    /// Encode fragments to sRGB, for a view whose resolved `CompositingSpace` is `Srgb`.
+    pub srgb_output: bool,
     pub bind_group_data: M::Data,
 }
 
@@ -137,7 +139,9 @@ where
     M::Data: PartialEq,
 {
     fn eq(&self, other: &Self) -> bool {
-        self.target_format == other.target_format && self.bind_group_data == other.bind_group_data
+        self.target_format == other.target_format
+            && self.srgb_output == other.srgb_output
+            && self.bind_group_data == other.bind_group_data
     }
 }
 
@@ -148,6 +152,7 @@ where
     fn clone(&self) -> Self {
         Self {
             target_format: self.target_format,
+            srgb_output: self.srgb_output,
             bind_group_data: self.bind_group_data.clone(),
         }
     }
@@ -159,6 +164,7 @@ where
 {
     fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
         self.target_format.hash(state);
+        self.srgb_output.hash(state);
         self.bind_group_data.hash(state);
     }
 }
