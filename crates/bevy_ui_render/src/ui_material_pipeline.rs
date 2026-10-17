@@ -150,7 +150,10 @@ where
                 VertexFormat::Float32x4,
             ],
         );
-        let shader_defs = Vec::new();
+        let mut shader_defs = Vec::new();
+        if key.srgb_output {
+            shader_defs.push("SRGB_OUTPUT".into());
+        }
 
         let mut descriptor = RenderPipelineDescriptor {
             vertex: VertexState {
@@ -674,7 +677,7 @@ pub fn queue_ui_material_nodes<M: UiMaterial>(
     pipeline_cache: Res<PipelineCache>,
     render_materials: Res<RenderAssets<PreparedUiMaterial<M>>>,
     mut transparent_render_phases: ResMut<ViewSortedRenderPhases<TransparentUi>>,
-    render_views: Query<&UiCameraView, With<ExtractedView>>,
+    render_views: Query<(&UiCameraView, Option<&ResolvedCompositingSpace>), With<ExtractedView>>,
     camera_views: Query<&ExtractedView>,
 ) where
     M::Data: PartialEq + Eq + Hash + Clone,
@@ -687,26 +690,28 @@ pub fn queue_ui_material_nodes<M: UiMaterial>(
         extracted_uinodes.uinodes.iter()
     {
         if current_camera_entity != *extracted_camera_entity {
-            current_phase =
-                render_views
-                    .get(*extracted_camera_entity)
-                    .ok()
-                    .and_then(|default_camera_view| {
-                        camera_views
-                            .get(default_camera_view.0)
-                            .ok()
-                            .and_then(|view| {
-                                transparent_render_phases
-                                    .get_mut(&view.retained_view_entity)
-                                    .map(|transparent_phase| {
-                                        (view.target_format, transparent_phase)
-                                    })
-                            })
-                    });
+            current_phase = render_views.get(*extracted_camera_entity).ok().and_then(
+                |(default_camera_view, resolved_space)| {
+                    camera_views
+                        .get(default_camera_view.0)
+                        .ok()
+                        .and_then(|view| {
+                            transparent_render_phases
+                                .get_mut(&view.retained_view_entity)
+                                .map(|transparent_phase| {
+                                    (
+                                        view.target_format,
+                                        srgb_output(resolved_space),
+                                        transparent_phase,
+                                    )
+                                })
+                        })
+                },
+            );
             current_camera_entity = *extracted_camera_entity;
         }
 
-        let Some((target_format, transparent_phase)) = current_phase.as_mut() else {
+        let Some((target_format, srgb_output, transparent_phase)) = current_phase.as_mut() else {
             continue;
         };
         for (render_entity, extracted_uinode) in extracted_sub_uinodes.iter() {
@@ -719,6 +724,7 @@ pub fn queue_ui_material_nodes<M: UiMaterial>(
                 &ui_material_pipeline,
                 UiMaterialKey {
                     target_format: *target_format,
+                    srgb_output: *srgb_output,
                     bind_group_data: material.key.clone(),
                 },
             );

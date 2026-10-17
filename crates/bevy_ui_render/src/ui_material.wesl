@@ -3,6 +3,8 @@ import bevy_render::{
     globals::Globals,
 };
 import package::ui_vertex_output::UiVertexOutput;
+@if(SRGB_OUTPUT)
+import bevy_render::color_operations::linear_to_srgb;
 
 @group(0) @binding(0)
 var<uniform> view: View;
@@ -30,5 +32,10 @@ fn vertex(
 
 @fragment
 fn fragment(in: UiVertexOutput) -> @location(0) vec4<f32> {
-    return vec4<f32>(1.0);
+    var out = vec4<f32>(1.0);
+
+@if(SRGB_OUTPUT)
+    out = vec4(linear_to_srgb(out.rgb), out.a);
+
+    return out;
 }

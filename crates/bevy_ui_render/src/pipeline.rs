@@ -49,6 +49,8 @@ pub fn init_ui_pipeline(mut commands: Commands, asset_server: Res<AssetServer>) 
 pub struct UiPipelineKey {
     pub target_format: TextureFormat,
     pub anti_alias: bool,
+    /// Encode fragments to sRGB, for a view whose resolved `CompositingSpace` is `Srgb`.
+    pub srgb_output: bool,
 }
 
 impl SpecializedRenderPipeline for UiPipeline {
@@ -78,11 +80,13 @@ impl SpecializedRenderPipeline for UiPipeline {
                 VertexFormat::Float32x2,
             ],
         );
-        let shader_defs = if key.anti_alias {
-            vec!["ANTI_ALIAS".into()]
-        } else {
-            Vec::new()
-        };
+        let mut shader_defs = Vec::new();
+        if key.anti_alias {
+            shader_defs.push("ANTI_ALIAS".into());
+        }
+        if key.srgb_output {
+            shader_defs.push("SRGB_OUTPUT".into());
+        }
 
         RenderPipelineDescriptor {
             vertex: VertexState {
