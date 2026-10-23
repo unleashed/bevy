@@ -158,7 +158,7 @@ pub struct GlyphStroke {
     /// Width of a stroke centred on the outline and unioned with the fill, so the raster is the
     /// glyph grown by half of it; 0 is the fill alone.
     pub width: f32,
-    /// Growth of each stem in total, FreeType's `FT_Outline_Embolden` strength, applied to the
+    /// Growth of each stem in total, `FreeType`'s `FT_Outline_Embolden` strength, applied to the
     /// outline before the stroke or the fill (and before the `legacy_glyph_weight` scale).
     pub embolden: f32,
 }
