@@ -9,8 +9,8 @@ use bevy_math::Affine2;
 use bevy_reflect::{std_traits::ReflectDefault, Reflect};
 use bevy_render::Extract;
 use bevy_text::{
-    stroke_glyph_layout, ComputedTextBlock, EditableText, FontHinting, PositionedGlyph, ScaleCx,
-    StrokeAtlasSet, StrokeGlyph, TextLayoutInfo,
+    stroke_glyph_layout, ComputedTextBlock, EditableText, FontAtlasSet, FontHinting,
+    PositionedGlyph, ScaleCx, StrokeAtlasSet, StrokeGlyph, TextLayoutInfo,
 };
 use bevy_ui::{
     CalculatedClip, ComputedNode, ComputedStackIndex, ComputedUiTargetCamera, UiGlobalTransform,
@@ -64,6 +64,7 @@ pub fn update_text_outline_glyphs(
         Option<&StrokeGlyph>,
         &mut TextOutlineGlyphs,
     )>,
+    fills: Res<FontAtlasSet>,
     mut atlas_set: ResMut<StrokeAtlasSet>,
     mut textures: ResMut<Assets<Image>>,
     mut scale_cx: ResMut<ScaleCx>,
@@ -80,6 +81,7 @@ pub fn update_text_outline_glyphs(
             computed,
             stroke,
             hinting.copied().unwrap_or_default(),
+            &fills.legacy_glyph_weight_fonts,
             &mut atlas_set,
             &mut textures,
             &mut scale_cx,

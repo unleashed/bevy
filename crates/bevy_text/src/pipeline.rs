@@ -15,13 +15,13 @@ use parley::{Alignment, AlignmentOptions, Layout, PositionedLayoutItem, StylePro
 use swash::FontRef;
 
 use crate::{
-    add_glyph_to_atlas,
+    add_stroke_glyph_to_atlas,
     error::TextError,
     get_glyph_atlas_info,
     parley_context::{FontCx, LayoutCx, ScaleCx},
     ComputedTextBlock, Font, FontAtlasKey, FontAtlasSet, FontHinting, FontSmoothing, FontSource,
-    Justify, LetterSpacing, LineBreak, LineHeight, PositionedGlyph, TextBounds, TextEntity,
-    TextFont, TextLayout,
+    GlyphStroke, Justify, LetterSpacing, LineBreak, LineHeight, PositionedGlyph, TextBounds,
+    TextEntity, TextFont, TextLayout,
 };
 use crate::{RemSize, TextBrush};
 
@@ -385,6 +385,9 @@ impl TextPipeline {
                         };
 
                         let mut maybe_scaler = None;
+                        let legacy_weight = font_atlas_set
+                            .legacy_glyph_weight_fonts
+                            .contains(&font.data.id());
 
                         for glyph in glyph_run.positioned_glyphs() {
                             let Ok(glyph_id) = u16::try_from(glyph.id) else {
@@ -413,12 +416,16 @@ impl TextPipeline {
                                                 .build(),
                                         );
                                     }
-                                    add_glyph_to_atlas(
+                                    add_stroke_glyph_to_atlas(
                                         font_atlases,
                                         textures,
                                         maybe_scaler.as_mut().unwrap(),
                                         font_smoothing,
                                         glyph_id,
+                                        GlyphStroke {
+                                            legacy_weight,
+                                            ..GlyphStroke::default()
+                                        },
                                     )?
                                 }
                             };

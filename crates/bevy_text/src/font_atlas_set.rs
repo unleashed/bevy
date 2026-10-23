@@ -3,7 +3,7 @@ use bevy_asset::Assets;
 use bevy_derive::{Deref, DerefMut};
 use bevy_ecs::resource::Resource;
 use bevy_image::Image;
-use bevy_platform::collections::HashMap;
+use bevy_platform::collections::{HashMap, HashSet};
 
 /// Identifies the font atlases for a particular font in [`FontAtlasSet`]
 ///
@@ -26,7 +26,16 @@ pub struct FontAtlasKey {
 
 /// Set of rasterized fonts stored in [`FontAtlas`]es.
 #[derive(Debug, Default, Resource, Deref, DerefMut)]
-pub struct FontAtlasSet(HashMap<FontAtlasKey, Vec<FontAtlas>>);
+pub struct FontAtlasSet {
+    #[deref]
+    atlases: HashMap<FontAtlasKey, Vec<FontAtlas>>,
+    /// The fonts, by the id of their data ([`Font::data`](crate::Font::data)), whose glyph
+    /// outlines the `legacy_glyph_weight` feature scales by 64/60: Godot 4.7.2 draws only its
+    /// MSDF font imports so (`ft_point2` is the MSDF rasteriser's), while a plain font, such as
+    /// its default theme font, is a `FreeType` raster at its size. A font must be listed before its
+    /// first glyph is rasterised, since its atlases are kept.
+    pub legacy_glyph_weight_fonts: HashSet<u64>,
+}
 
 impl FontAtlasSet {
     /// Checks whether the given subpixel-offset glyph is contained in any of the [`FontAtlas`]es for the font identified by the given [`FontAtlasKey`].
@@ -50,6 +59,6 @@ impl FontAtlasSet {
 
     /// Clear all font atlases
     pub fn clear(&mut self) {
-        self.0.clear();
+        self.atlases.clear();
     }
 }

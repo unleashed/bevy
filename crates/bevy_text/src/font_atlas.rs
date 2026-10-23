@@ -134,7 +134,8 @@ impl core::fmt::Debug for FontAtlas {
     }
 }
 
-/// Adds the given subpixel-offset glyph to the given font atlases
+/// Adds the given subpixel-offset glyph to the given font atlases, unscaled (outside
+/// [`FontAtlasSet::legacy_glyph_weight_fonts`](crate::FontAtlasSet)).
 pub fn add_glyph_to_atlas(
     font_atlases: &mut Vec<FontAtlas>,
     textures: &mut Assets<Image>,
@@ -161,6 +162,9 @@ pub struct GlyphStroke {
     /// Growth of each stem in total, `FreeType`'s `FT_Outline_Embolden` strength, applied to the
     /// outline before the stroke or the fill (and before the `legacy_glyph_weight` scale).
     pub embolden: f32,
+    /// Whether the `legacy_glyph_weight` feature scales the outline by 64/60 (the font is in
+    /// [`FontAtlasSet::legacy_glyph_weight_fonts`](crate::FontAtlasSet)).
+    pub legacy_weight: bool,
 }
 
 /// Adds the given glyph, stroked or emboldened as `stroke` says, to the given font atlases.
@@ -248,10 +252,12 @@ pub fn get_stroke_glyph_texture(
     render.format(swash::zeno::Format::Alpha);
     // Godot 4.7.2's `ft_point2` divides 26.6 outline coordinates by 60.0f (fixed in 4.8 behind `gui/fonts/compatibility/msdf_legacy_scaling`).
     #[cfg(feature = "legacy_glyph_weight")]
-    render.transform(Some(swash::zeno::Transform::scale(
-        64.0 / 60.0,
-        64.0 / 60.0,
-    )));
+    if stroke.legacy_weight {
+        render.transform(Some(swash::zeno::Transform::scale(
+            64.0 / 60.0,
+            64.0 / 60.0,
+        )));
+    }
     // swash moves each edge by the strength where FreeType's `FT_Outline_EmboldenXY` halves it
     // first (swash `scale/outline.rs` `embolden`), so half of FreeType's strength grows a stem as
     // much. swash emboldens before the transform, as Godot does before `ft_point2`.
@@ -371,6 +377,37 @@ pub fn get_glyph_atlas_info(
                 is_alpha_mask: location.is_alpha_mask,
             })
     })
+}
+
+#[cfg(all(test, feature = "legacy_glyph_weight"))]
+mod legacy_glyph_weight_tests {
+    use super::*;
+    use swash::{scale::ScaleContext, FontRef};
+
+    // Only a font listed in `FontAtlasSet::legacy_glyph_weight_fonts` draws at 64/60.
+    #[test]
+    fn legacy_weight_scales_only_the_flagged_raster() {
+        let font =
+            FontRef::from_index(include_bytes!("FiraMono-subset.ttf"), 0).expect("valid test font");
+        let glyph_id = font.charmap().map('M');
+        let mut scale_context = ScaleContext::new();
+        let mut height = |legacy_weight| {
+            let mut scaler = scale_context.builder(font).size(120.0).build();
+            let stroke = GlyphStroke {
+                legacy_weight,
+                ..GlyphStroke::default()
+            };
+            let (image, _, _) =
+                get_stroke_glyph_texture(&mut scaler, glyph_id, FontSmoothing::AntiAliased, stroke)
+                    .expect("glyph should rasterize");
+            image.height() as f32
+        };
+        let (plain, legacy) = (height(false), height(true));
+        assert!(
+            (legacy / plain - 64.0 / 60.0).abs() < 0.03,
+            "{plain} px plain, {legacy} px legacy"
+        );
+    }
 }
 
 #[cfg(test)]

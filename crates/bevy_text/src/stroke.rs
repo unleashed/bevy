@@ -5,7 +5,7 @@ use bevy_derive::{Deref, DerefMut};
 use bevy_ecs::prelude::*;
 use bevy_image::Image;
 use bevy_math::Vec2;
-use bevy_platform::collections::HashMap;
+use bevy_platform::collections::{HashMap, HashSet};
 use bevy_platform::hash::FixedHasher;
 use bevy_reflect::{std_traits::ReflectDefault, Reflect};
 use core::hash::BuildHasher;
@@ -14,8 +14,8 @@ use swash::FontRef;
 
 use crate::{
     add_stroke_glyph_to_atlas, get_glyph_atlas_info, ComputedTextBlock, FontAtlas, FontAtlasKey,
-    FontHinting, FontSmoothing, GlyphCacheKey, GlyphStroke, PositionedGlyph, ScaleCx, TextError,
-    TextLayoutInfo,
+    FontAtlasSet, FontHinting, FontSmoothing, GlyphCacheKey, GlyphStroke, PositionedGlyph, ScaleCx,
+    TextError, TextLayoutInfo,
 };
 
 /// Draws a text's glyphs grown by half of `width_px` (a stroke of that width centred on the
@@ -42,6 +42,7 @@ impl StrokeGlyph {
         GlyphStroke {
             width: self.width_px * scale_factor,
             embolden: self.embolden * font_size / 16.0,
+            legacy_weight: false,
         }
     }
 }
@@ -69,11 +70,13 @@ pub struct StrokeGlyphSystems;
 /// Lays out `stroke`'s rasters of the glyphs of `computed`, whose layout
 /// [`TextPipeline::update_text_layout_info`](crate::TextPipeline::update_text_layout_info) has
 /// placed: one [`PositionedGlyph`] per glyph of that call's, in its order and at its pen
-/// positions, each offset by its own raster's placement.
+/// positions, each offset by its own raster's placement. The fonts in `legacy_glyph_weight_fonts`
+/// are scaled as their fills are ([`FontAtlasSet::legacy_glyph_weight_fonts`]).
 pub fn stroke_glyph_layout(
     computed: &ComputedTextBlock,
     stroke: StrokeGlyph,
     hinting: FontHinting,
+    legacy_glyph_weight_fonts: &HashSet<u64>,
     atlas_set: &mut StrokeAtlasSet,
     textures: &mut Assets<Image>,
     scale_cx: &mut ScaleCx,
@@ -92,7 +95,10 @@ pub fn stroke_glyph_layout(
             let font = run.font();
             let font_size = run.font_size();
             let coords = run.normalized_coords();
-            let glyph_stroke = stroke.at(font_size, scale_factor);
+            let glyph_stroke = GlyphStroke {
+                legacy_weight: legacy_glyph_weight_fonts.contains(&font.data.id()),
+                ..stroke.at(font_size, scale_factor)
+            };
             let key = StrokeAtlasKey {
                 font: FontAtlasKey {
                     id: font.data.id() as u32,
@@ -169,6 +175,7 @@ pub fn update_stroke_glyphs(
         Option<&FontHinting>,
         Mut<TextLayoutInfo>,
     )>,
+    fills: Res<FontAtlasSet>,
     mut atlas_set: ResMut<StrokeAtlasSet>,
     // Absent in an app without images, which lays nothing out either.
     textures: Option<ResMut<Assets<Image>>>,
@@ -186,6 +193,7 @@ pub fn update_stroke_glyphs(
             computed,
             *stroke,
             hinting.copied().unwrap_or_default(),
+            &fills.legacy_glyph_weight_fonts,
             &mut atlas_set,
             &mut textures,
             &mut scale_cx,
