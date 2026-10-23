@@ -15,6 +15,10 @@ pub use image::ImageNodeAssetChangedSystems;
 mod pipeline;
 pub mod render_pass;
 mod text;
+mod text_outline;
+pub use text_outline::{
+    extract_text_outlines, update_text_outline_glyphs, TextOutline, TextOutlineGlyphs,
+};
 pub mod ui_material;
 mod ui_material_pipeline;
 pub mod ui_texture_slice_pipeline;
@@ -228,6 +232,21 @@ impl Plugin for UiRenderPlugin {
                 .after(AccessibilitySystems::Update),
         );
 
+        // Stroked glyphs once both text layouts have run: `TextOutline`'s here, `StrokeGlyph`'s
+        // in bevy_text's set, which only this crate can order after both.
+        app.configure_sets(
+            PostUpdate,
+            bevy_text::StrokeGlyphSystems
+                .after(UiSystems::PostLayout)
+                .after(bevy_sprite::update_text2d_layout),
+        )
+        .add_systems(
+            PostUpdate,
+            update_text_outline_glyphs
+                .after(bevy_text::update_stroke_glyphs)
+                .in_set(bevy_text::StrokeGlyphSystems),
+        );
+
         let Some(render_app) = app.get_sub_app_mut(RenderApp) else {
             return;
         };
@@ -276,6 +295,9 @@ impl Plugin for UiRenderPlugin {
                     extract_viewport_nodes.in_set(RenderUiSystems::ExtractViewportNodes),
                     extract_text_decorations.in_set(RenderUiSystems::ExtractTextBackgrounds),
                     extract_text_shadows.in_set(RenderUiSystems::ExtractTextShadows),
+                    extract_text_outlines
+                        .after(extract_text_shadows)
+                        .in_set(RenderUiSystems::ExtractTextShadows),
                     extract_text_sections.in_set(RenderUiSystems::ExtractText),
                     extract_text_cursor.in_set(RenderUiSystems::ExtractCursor),
                     extract_preedit_underlines.in_set(RenderUiSystems::ExtractCursor),
@@ -476,7 +498,12 @@ pub fn extract_uinode_changes(
                         Changed<Underline>,
                         Changed<Strikethrough>,
                     )>,
-                    Or<(Changed<StrikethroughColor>, Changed<UnderlineColor>)>,
+                    Or<(
+                        Changed<StrikethroughColor>,
+                        Changed<UnderlineColor>,
+                        Changed<TextOutline>,
+                        Changed<TextOutlineGlyphs>,
+                    )>,
                 )>,
             ),
         >,
@@ -564,10 +591,12 @@ pub fn extract_uinode_changes(
         mut removed_strikethrough_color_query,
         mut removed_underline_color_query,
         mut removed_inline_image_query,
+        mut removed_text_outline_query,
     ): (
         Extract<RemovedComponents<StrikethroughColor>>,
         Extract<RemovedComponents<UnderlineColor>>,
         Extract<RemovedComponents<InlineImage>>,
+        Extract<RemovedComponents<TextOutline>>,
     ),
     #[cfg(feature = "bevy_ui_debug")] mut removed_debug_options_query: Extract<
         RemovedComponents<UiDebugOptions>,
@@ -629,6 +658,7 @@ pub fn extract_uinode_changes(
             .chain(removed_strikethrough_color_query.read())
             .chain(removed_underline_color_query.read())
             .chain(removed_inline_image_query.read())
+            .chain(removed_text_outline_query.read())
         {
             process_changed_entity(
                 main_entity.into(),
