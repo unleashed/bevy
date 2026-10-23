@@ -142,8 +142,41 @@ pub fn add_glyph_to_atlas(
     font_smoothing: FontSmoothing,
     glyph_id: u16,
 ) -> Result<GlyphAtlasInfo, TextError> {
+    add_stroke_glyph_to_atlas(
+        font_atlases,
+        textures,
+        scaler,
+        font_smoothing,
+        glyph_id,
+        GlyphStroke::default(),
+    )
+}
+
+/// How a glyph's outline is changed before it is rasterised, in physical pixels of the raster.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct GlyphStroke {
+    /// Width of a stroke centred on the outline and unioned with the fill, so the raster is the
+    /// glyph grown by half of it; 0 is the fill alone.
+    pub width: f32,
+    /// Growth of each stem in total, FreeType's `FT_Outline_Embolden` strength, applied to the
+    /// outline before the stroke or the fill (and before the `legacy_glyph_weight` scale).
+    pub embolden: f32,
+}
+
+/// Adds the given glyph, stroked or emboldened as `stroke` says, to the given font atlases.
+///
+/// The atlases are keyed by glyph id alone, so they must hold rasters of this one `stroke`
+/// (see [`StrokeAtlasSet`](crate::StrokeAtlasSet)).
+pub fn add_stroke_glyph_to_atlas(
+    font_atlases: &mut Vec<FontAtlas>,
+    textures: &mut Assets<Image>,
+    scaler: &mut Scaler,
+    font_smoothing: FontSmoothing,
+    glyph_id: u16,
+    stroke: GlyphStroke,
+) -> Result<GlyphAtlasInfo, TextError> {
     let (glyph_texture, offset, is_alpha_mask) =
-        get_outlined_glyph_texture(scaler, glyph_id, font_smoothing)?;
+        get_stroke_glyph_texture(scaler, glyph_id, font_smoothing, stroke)?;
     let mut add_char_to_font_atlas = |atlas: &mut FontAtlas| -> Result<(), TextError> {
         atlas.add_glyph(
             textures,
@@ -188,14 +221,24 @@ pub fn add_glyph_to_atlas(
 }
 
 /// Get the texture of the glyph as a rendered image, and its offset
-#[expect(
-    clippy::identity_op,
-    reason = "Alignment improves clarity during RGBA operations."
-)]
 pub fn get_outlined_glyph_texture(
     scaler: &mut Scaler,
     glyph_id: u16,
     font_smoothing: FontSmoothing,
+) -> Result<(Image, Vec2, bool), TextError> {
+    get_stroke_glyph_texture(scaler, glyph_id, font_smoothing, GlyphStroke::default())
+}
+
+/// Get the texture of the glyph, stroked or emboldened as `stroke` says, and its offset
+#[expect(
+    clippy::identity_op,
+    reason = "Alignment improves clarity during RGBA operations."
+)]
+pub fn get_stroke_glyph_texture(
+    scaler: &mut Scaler,
+    glyph_id: u16,
+    font_smoothing: FontSmoothing,
+    stroke: GlyphStroke,
 ) -> Result<(Image, Vec2, bool), TextError> {
     let mut render = swash::scale::Render::new(&[
         swash::scale::Source::ColorOutline(0),
@@ -209,9 +252,31 @@ pub fn get_outlined_glyph_texture(
         64.0 / 60.0,
         64.0 / 60.0,
     )));
-    let image = render
+    // swash moves each edge by the strength where FreeType's `FT_Outline_EmboldenXY` halves it
+    // first (swash `scale/outline.rs` `embolden`), so half of FreeType's strength grows a stem as
+    // much. swash emboldens before the transform, as Godot does before `ft_point2`.
+    if stroke.embolden != 0.0 {
+        render.embolden(stroke.embolden / 2.0);
+    }
+    let fill = render
         .render(scaler, glyph_id)
         .ok_or(TextError::FailedToGetGlyphImage(glyph_id))?;
+    let image = if stroke.width > 0.0 {
+        // swash strokes after the transform: the 64/60 scale moves the stroke with the fill and
+        // leaves its width. Round joins, as the distance band of Godot's MSDF outline has.
+        render.style(swash::zeno::Stroke {
+            width: stroke.width,
+            join: swash::zeno::Join::Round,
+            ..swash::zeno::Stroke::default()
+        });
+        let mut band = render
+            .render(scaler, glyph_id)
+            .ok_or(TextError::FailedToGetGlyphImage(glyph_id))?;
+        grow_by_fill(&mut band, &fill);
+        band
+    } else {
+        fill
+    };
 
     let left = image.placement.left;
     let top = image.placement.top;
@@ -264,6 +329,31 @@ pub fn get_outlined_glyph_texture(
         Vec2::new(left as f32, -top as f32),
         image.content == swash::scale::image::Content::Mask,
     ))
+}
+
+/// Unions the `fill` mask into the stroke `band` around it (the larger of the two coverages), so
+/// the band becomes the glyph grown by half the stroke width with its inside filled, as Godot's
+/// MSDF outline draws it (`canvas.glsl`, the distance test `d - 0.5 + cr`): a translucent outline
+/// under a translucent fill stacks over the whole glyph, not only along its edges.
+fn grow_by_fill(band: &mut swash::scale::image::Image, fill: &swash::scale::image::Image) {
+    use swash::scale::image::Content;
+    if band.content != Content::Mask || fill.content != Content::Mask {
+        return;
+    }
+    let (b, f) = (band.placement, fill.placement);
+    for fy in 0..f.height as i32 {
+        // Rows run down from `top`, which is up from the baseline.
+        let by = b.top - f.top + fy;
+        for fx in 0..f.width as i32 {
+            let bx = f.left - b.left + fx;
+            if by < 0 || bx < 0 || by >= b.height as i32 || bx >= b.width as i32 {
+                continue;
+            }
+            let coverage = fill.data[(fy * f.width as i32 + fx) as usize];
+            let out = &mut band.data[(by * b.width as i32 + bx) as usize];
+            *out = (*out).max(coverage);
+        }
+    }
 }
 
 /// Generates the [`GlyphAtlasInfo`] for the given subpixel-offset glyph.

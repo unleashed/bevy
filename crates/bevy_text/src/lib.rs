@@ -44,6 +44,7 @@ mod inline_box;
 mod parley_context;
 mod pipeline;
 mod scroll;
+mod stroke;
 mod text;
 mod text_access;
 mod text_edit;
@@ -61,6 +62,7 @@ pub use inline_box::*;
 pub use parley_context::*;
 pub use pipeline::*;
 pub use scroll::*;
+pub use stroke::*;
 pub use text::*;
 pub use text_access::*;
 pub use text_edit::*;
@@ -120,6 +122,7 @@ impl Plugin for TextPlugin {
         app.init_asset::<Font>()
             .init_asset_loader::<FontLoader>()
             .init_resource::<FontAtlasSet>()
+            .init_resource::<StrokeAtlasSet>()
             .init_resource::<TextPipeline>()
             .init_resource::<FontCx>()
             .init_resource::<LayoutCx>()
@@ -136,6 +139,9 @@ impl Plugin for TextPlugin {
                     .after(PropagateSet::<TextFont>::default()),
             )
             .add_systems(Last, trim_source_cache)
+            // The layout systems are bevy_sprite's and bevy_ui's, so the set is ordered after
+            // them where both are known (`bevy_ui_render`'s plugin).
+            .add_systems(PostUpdate, update_stroke_glyphs.in_set(StrokeGlyphSystems))
             .add_systems(
                 PostUpdate,
                 apply_text_edits
