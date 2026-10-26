@@ -20,6 +20,10 @@ pub enum InlineBoxKind {
     ///
     /// They correspond to `display: inline-block` boxes in CSS.    
     InFlow,
+    /// `InFlowCentered` boxes take up space as `InFlow` boxes do, centred on their line rather
+    /// than on the baseline: a box taller than the line grows it by the overflow, half above and
+    /// half below (parley's `InlineBoxKind::InFlowCentered`, Godot's `INLINE_ALIGNMENT_CENTER`).
+    InFlowCentered,
     /// `OutOfFlow` boxes are assigned a position as if they were a zero-sized inline box, but
     /// do not take up space in the layout.
     ///
@@ -32,6 +36,7 @@ impl From<InlineBoxKind> for parley::InlineBoxKind {
     fn from(inline_box_kind: InlineBoxKind) -> parley::InlineBoxKind {
         match inline_box_kind {
             InlineBoxKind::InFlow => parley::InlineBoxKind::InFlow,
+            InlineBoxKind::InFlowCentered => parley::InlineBoxKind::InFlowCentered,
             InlineBoxKind::OutOfFlow => parley::InlineBoxKind::OutOfFlow,
         }
     }
@@ -41,6 +46,7 @@ impl From<parley::InlineBoxKind> for InlineBoxKind {
     fn from(inline_box_kind: parley::InlineBoxKind) -> InlineBoxKind {
         match inline_box_kind {
             parley::InlineBoxKind::InFlow => InlineBoxKind::InFlow,
+            parley::InlineBoxKind::InFlowCentered => InlineBoxKind::InFlowCentered,
             parley::InlineBoxKind::OutOfFlow => InlineBoxKind::OutOfFlow,
             parley::InlineBoxKind::CustomOutOfFlow => {
                 unimplemented!("parley::CustomOfFlow is not supported.")
