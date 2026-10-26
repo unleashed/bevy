@@ -35,6 +35,13 @@ pub struct FontAtlasSet {
     /// its default theme font, is a `FreeType` raster at its size. A font must be listed before its
     /// first glyph is rasterised, since its atlases are kept.
     pub legacy_glyph_weight_fonts: HashSet<u64>,
+    /// The fonts, by the id of their data, whose glyph outlines are sheared `x + slant * y`
+    /// (y up) before they are rasterised: Godot's `FontVariation.variation_transform` slant, as
+    /// its default theme's italics font carries `Transform2D(1, 0.2, 0, 1, 0, 0)`. Advances are
+    /// left alone, as Godot's synthetic slant leaves them. A slanted face is its own `Font`
+    /// asset (its own data id), so its atlases are its own; list it before its first glyph is
+    /// rasterised.
+    pub font_slants: HashMap<u64, f32>,
 }
 
 impl FontAtlasSet {

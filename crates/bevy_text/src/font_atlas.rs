@@ -165,6 +165,9 @@ pub struct GlyphStroke {
     /// Whether the `legacy_glyph_weight` feature scales the outline by 64/60 (the font is in
     /// [`FontAtlasSet::legacy_glyph_weight_fonts`](crate::FontAtlasSet)).
     pub legacy_weight: bool,
+    /// The outline's shear `x + slant * y` (y up), applied first
+    /// ([`FontAtlasSet::font_slants`](crate::FontAtlasSet)).
+    pub slant: f32,
 }
 
 /// Adds the given glyph, stroked or emboldened as `stroke` says, to the given font atlases.
@@ -250,13 +253,18 @@ pub fn get_stroke_glyph_texture(
         swash::scale::Source::Outline,
     ]);
     render.format(swash::zeno::Format::Alpha);
+    // Godot shears the outline (`FT_Outline_Transform`, `text_server_adv.cpp:1363-1366` at
+    // 4.7.2-stable) before any other change of it.
+    let slant = swash::zeno::Transform::new(1.0, 0.0, stroke.slant, 1.0, 0.0, 0.0);
+    if stroke.slant != 0.0 {
+        render.transform(Some(slant));
+    }
     // Godot 4.7.2's `ft_point2` divides 26.6 outline coordinates by 60.0f (fixed in 4.8 behind `gui/fonts/compatibility/msdf_legacy_scaling`).
     #[cfg(feature = "legacy_glyph_weight")]
     if stroke.legacy_weight {
-        render.transform(Some(swash::zeno::Transform::scale(
-            64.0 / 60.0,
-            64.0 / 60.0,
-        )));
+        render.transform(Some(
+            slant.then(&swash::zeno::Transform::scale(64.0 / 60.0, 64.0 / 60.0)),
+        ));
     }
     // swash moves each edge by the strength where FreeType's `FT_Outline_EmboldenXY` halves it
     // first (swash `scale/outline.rs` `embolden`), so half of FreeType's strength grows a stem as
@@ -406,6 +414,57 @@ mod legacy_glyph_weight_tests {
         assert!(
             (legacy / plain - 64.0 / 60.0).abs() < 0.03,
             "{plain} px plain, {legacy} px legacy"
+        );
+    }
+}
+
+#[cfg(test)]
+mod slant_tests {
+    use super::*;
+    use swash::{scale::ScaleContext, FontRef};
+
+    // A slanted raster leans right going up: x + slant * y widens the glyph by slant times its
+    // height and moves its top half right of its bottom half (an "I", whose serifs match).
+    #[test]
+    fn slant_shears_the_raster_right_going_up() {
+        let font =
+            FontRef::from_index(include_bytes!("FiraMono-subset.ttf"), 0).expect("valid test font");
+        let glyph_id = font.charmap().map('I');
+        let mut scale_context = ScaleContext::new();
+        let mut raster = |slant| {
+            let mut scaler = scale_context.builder(font).size(120.0).build();
+            let stroke = GlyphStroke {
+                slant,
+                ..GlyphStroke::default()
+            };
+            let (image, _, _) =
+                get_stroke_glyph_texture(&mut scaler, glyph_id, FontSmoothing::AntiAliased, stroke)
+                    .expect("glyph should rasterize");
+            let (w, h) = (image.width() as usize, image.height() as usize);
+            let data = image.data.expect("raster data");
+            // Ink-weighted mean x of the rows in `rows`.
+            let centroid = |rows: core::ops::Range<usize>| {
+                let (mut sum, mut ink) = (0.0, 0.0);
+                for y in rows {
+                    for x in 0..w {
+                        let a = f32::from(data[(y * w + x) * 4 + 3]);
+                        sum += a * x as f32;
+                        ink += a;
+                    }
+                }
+                sum / ink
+            };
+            (w as f32, h as f32, centroid(0..h / 2) - centroid(h / 2..h))
+        };
+        let (upright, height, upright_lean) = raster(0.0);
+        let (slanted, _, slanted_lean) = raster(0.2);
+        assert!(
+            (slanted - upright - 0.2 * height).abs() < 2.0,
+            "{upright} to {slanted} px wide, {height} tall"
+        );
+        assert!(
+            slanted_lean - upright_lean > 0.2 * height / 4.0,
+            "{upright_lean} to {slanted_lean}"
         );
     }
 }

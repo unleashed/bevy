@@ -81,7 +81,7 @@ pub fn update_text_outline_glyphs(
             computed,
             stroke,
             hinting.copied().unwrap_or_default(),
-            &fills.legacy_glyph_weight_fonts,
+            &fills,
             &mut atlas_set,
             &mut textures,
             &mut scale_cx,

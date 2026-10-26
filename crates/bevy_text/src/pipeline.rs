@@ -388,6 +388,11 @@ impl TextPipeline {
                         let legacy_weight = font_atlas_set
                             .legacy_glyph_weight_fonts
                             .contains(&font.data.id());
+                        let slant = font_atlas_set
+                            .font_slants
+                            .get(&font.data.id())
+                            .copied()
+                            .unwrap_or(0.0);
 
                         for glyph in glyph_run.positioned_glyphs() {
                             let Ok(glyph_id) = u16::try_from(glyph.id) else {
@@ -424,6 +429,7 @@ impl TextPipeline {
                                         glyph_id,
                                         GlyphStroke {
                                             legacy_weight,
+                                            slant,
                                             ..GlyphStroke::default()
                                         },
                                     )?
