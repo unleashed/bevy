@@ -7,7 +7,7 @@ use bevy_ecs::{
 use bevy_image::prelude::*;
 use bevy_log::warn_once;
 use bevy_math::{Rect, Vec2};
-use bevy_platform::hash::FixedHasher;
+use bevy_platform::{collections::HashSet, hash::FixedHasher};
 use bevy_reflect::{std_traits::ReflectDefault, Reflect};
 use core::hash::BuildHasher;
 use parley::style::{OverflowWrap, TextWrapMode, WordBreak};
@@ -41,6 +41,17 @@ pub struct TextPipeline {
     sections_buffer: Vec<TextSectionView<'static>>,
     /// Buffered string for concatenated text content.
     text_buffer: String,
+    /// The fonts, by the id of their data ([`Font::data`](crate::Font::data)), whose layouts keep
+    /// parley's line metrics unrounded: Godot 4.7.2 draws an MSDF font import's glyphs at the
+    /// exact baseline, the line's top plus the font's ascent (`label.cpp:840`, the ascent read at
+    /// the MSDF source size and scaled, `text_server_adv.cpp:3183`, the glyph at that position,
+    /// `:4340-4344`), where parley's quantized layout (Chrome's rule) rounds the ascent and descent
+    /// and floors half the leading above the line. A `bevy_ui` text layout
+    /// ([`Self::create_text_measure`]) is unquantized when every one of its text runs is in one of
+    /// these fonts, and quantized as before otherwise (Godot floors a plain font's glyph y,
+    /// `:4354-4356`); a `Text2d` ([`Self::update_buffer`]) stays quantized, its anchor on the
+    /// pixel grid.
+    pub unquantized_fonts: HashSet<u64>,
 }
 
 /// The collected data `TextPipeline` needs from a single entity to add it to a text layout.
@@ -82,6 +93,39 @@ impl TextPipeline {
         layout_cx: &mut LayoutCx,
         logical_viewport_size: Vec2,
         base_rem_size: RemSize,
+    ) -> Result<(), TextError> {
+        self.lay_out_spans(
+            fonts,
+            text_spans,
+            linebreak,
+            justify,
+            bounds,
+            scale_factor,
+            computed,
+            font_cx,
+            layout_cx,
+            logical_viewport_size,
+            base_rem_size,
+            false,
+        )
+    }
+
+    /// [`Self::update_buffer`]; with `unquantize` (`bevy_ui` text, [`Self::create_text_measure`]),
+    /// a layout whose text runs are all in [`Self::unquantized_fonts`] is laid out unquantized.
+    fn lay_out_spans<'a>(
+        &mut self,
+        fonts: &Assets<Font>,
+        text_spans: impl Iterator<Item = (Entity, usize, TextElement<'a>)>,
+        linebreak: LineBreak,
+        justify: Justify,
+        bounds: TextBounds,
+        scale_factor: f32,
+        computed: &mut ComputedTextBlock,
+        font_cx: &mut FontCx,
+        layout_cx: &mut LayoutCx,
+        logical_viewport_size: Vec2,
+        base_rem_size: RemSize,
+        unquantize: bool,
     ) -> Result<(), TextError> {
         computed.entities.clear();
         computed.needs_rerender = false;
@@ -187,12 +231,23 @@ impl TextPipeline {
                 }
             }
 
+            let quantize = !unquantize
+                || !sections.iter().all(|section| match section.text_item {
+                    TextElement::Text { font, .. } => match &font.font {
+                        FontSource::Handle(handle) => fonts
+                            .get(handle)
+                            .is_some_and(|font| self.unquantized_fonts.contains(&font.data.id())),
+                        _ => false,
+                    },
+                    TextElement::Box(_) => true,
+                });
             let text = self.text_buffer.as_str();
             let layout = &mut computed.layout;
 
-            let mut builder = layout_cx
-                .0
-                .ranged_builder(&mut (*font_cx), text, scale_factor, true);
+            let mut builder =
+                layout_cx
+                    .0
+                    .ranged_builder(&mut (*font_cx), text, scale_factor, quantize);
 
             match linebreak {
                 LineBreak::AnyCharacter => {
@@ -312,7 +367,7 @@ impl TextPipeline {
 
         computed.needs_rerender = false;
 
-        self.update_buffer(
+        self.lay_out_spans(
             fonts,
             text_spans,
             layout.linebreak,
@@ -324,6 +379,7 @@ impl TextPipeline {
             layout_cx,
             logical_viewport_size,
             base_rem_size,
+            true,
         )?;
 
         let layout_buffer = &mut computed.layout;
