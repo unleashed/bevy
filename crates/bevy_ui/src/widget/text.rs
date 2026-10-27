@@ -413,7 +413,12 @@ pub fn text_system(
                 // With `NoWrap` set, no constraints are placed on the width of the text.
                 TextBounds::UNBOUNDED
             } else {
-                let content_box_size = node.content_box().size();
+                // The node's unrounded content box: the measure wrapped the text at Taffy's
+                // unrounded width, and the rounded one can be a physical pixel wider or narrower,
+                // enough to keep a word on a line the measure (and Godot, laying out at its design
+                // size) moved down, or the reverse. The insets are the rounded ones.
+                let inset = node.content_inset();
+                let content_box_size = node.unrounded_size() - inset.min_inset - inset.max_inset;
                 TextBounds::new(content_box_size.x, content_box_size.y)
             };
 
