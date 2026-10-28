@@ -50,7 +50,9 @@ pub struct TextPipeline {
     /// ([`Self::create_text_measure`]) is unquantized when every one of its text runs is in one of
     /// these fonts, and quantized as before otherwise (Godot floors a plain font's glyph y,
     /// `:4354-4356`); a `Text2d` ([`Self::update_buffer`]) stays quantized, its anchor on the
-    /// pixel grid.
+    /// pixel grid. Every layout, `Text2d` too, tells parley's `godot-wrap` which of its runs are
+    /// in these fonts (`StyleProperty::GodotMsdf`): Godot shapes an MSDF import at its source size,
+    /// so its advances stay exact at every size, where it rounds a plain font's.
     pub unquantized_fonts: HashSet<u64>,
 }
 
@@ -231,14 +233,15 @@ impl TextPipeline {
                 }
             }
 
+            let listed = |font: &TextFont| match &font.font {
+                FontSource::Handle(handle) => fonts
+                    .get(handle)
+                    .is_some_and(|font| self.unquantized_fonts.contains(&font.data.id())),
+                _ => false,
+            };
             let quantize = !unquantize
                 || !sections.iter().all(|section| match section.text_item {
-                    TextElement::Text { font, .. } => match &font.font {
-                        FontSource::Handle(handle) => fonts
-                            .get(handle)
-                            .is_some_and(|font| self.unquantized_fonts.contains(&font.data.id())),
-                        _ => false,
-                    },
+                    TextElement::Text { font, .. } => listed(font),
                     TextElement::Box(_) => true,
                 });
             let text = self.text_buffer.as_str();
@@ -285,6 +288,10 @@ impl TextPipeline {
                         let resolved_family = text_font.font.resolve_font_family(fonts)?;
 
                         builder.push(StyleProperty::FontFamily(resolved_family), range.clone());
+                        // A listed font is a Godot MSDF import: parley's `godot-wrap` keeps its
+                        // exact advances at every size, where another font takes Godot's 26.6
+                        // steps up to 20 px and whole pixels above.
+                        builder.push(StyleProperty::GodotMsdf(listed(text_font)), range.clone());
                         builder.push(
                             StyleProperty::Brush(TextBrush::new(
                                 section.index as u32,
