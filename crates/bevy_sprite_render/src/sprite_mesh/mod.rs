@@ -6,7 +6,7 @@ use bevy_color::ColorToComponents;
 use bevy_ecs::{
     entity::Entity,
     query::{Added, Changed, Or},
-    schedule::IntoScheduleConfigs,
+    schedule::{IntoScheduleConfigs, SystemSet},
     system::{Commands, Local, Query, Res, ResMut},
 };
 
@@ -33,6 +33,12 @@ use crate::{
     MeshMaterial2d,
 };
 
+/// The systems that build a [`Sprite`]'s mesh and material from its fields each frame.
+///
+/// A system that edits a [`Sprite`] the frame it appears orders itself before this set.
+#[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
+pub struct SpriteMeshSystems;
+
 /// Plugin used to render a Sprite using a [`Mesh2d`] and a [`SpriteMaterial`]
 pub struct SpriteMeshPlugin;
 
@@ -48,6 +54,7 @@ impl Plugin for SpriteMeshPlugin {
             PostUpdate,
             (add_mesh, add_material)
                 .chain()
+                .in_set(SpriteMeshSystems)
                 .before(check_entities_needing_specialization::<SpriteMeshMaterial>)
                 .before(mark_2d_meshes_as_changed_if_their_materials_changed::<SpriteMeshMaterial>)
                 .before(mark_2d_meshes_as_changed_if_their_assets_changed)

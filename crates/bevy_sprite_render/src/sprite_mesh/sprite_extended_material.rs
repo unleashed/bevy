@@ -34,7 +34,7 @@ use core::hash::Hash;
 use crate::{
     check_entities_needing_specialization, mark_2d_meshes_as_changed_if_their_materials_changed,
     AlphaMode2d, ExtendedMaterial2d, Material2dKey, Material2dPlugin, MaterialExtension2d,
-    MeshMaterial2d, SpriteMeshMaterial,
+    MeshMaterial2d, SpriteMeshMaterial, SpriteMeshSystems,
 };
 
 /// Adds the necessary systems and resources for a [`SpriteMaterial`] of type `M`.
@@ -62,6 +62,7 @@ where
             .add_systems(
                 PostUpdate,
                 add_material::<M>
+                    .in_set(SpriteMeshSystems)
                     .before(check_entities_needing_specialization::<SpriteExt<M>>)
                     .before(mark_2d_meshes_as_changed_if_their_materials_changed::<SpriteExt<M>>)
                     .before(AssetEventSystems),
